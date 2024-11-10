@@ -16,14 +16,33 @@ def render8directions_selected_objects(path):
 
     s.render.resolution_x = 256 # set to whatever you want!
     s.render.resolution_y = 256
-
     
     # I left this in as in some of my models, I needed to translate the "root" object but
     # the animations were on the armature which I selected.
     # 
     # obRoot = bpy.context.scene.objects["root"]
+    
+    # The below is if you also want to render a normal to use in your engine for lighting.
+    # For this to work, you need to:
+    #    1. Enable "Normal" under View Layer - > Passes - > Data - > Normal in the properties panel.
+    #    2. In the compositing node tree, you need to add an: Output - > File Output node.
+    #    3. Connect the Normal node from the Rendered Layers Node to the File Output node.
+    #    4. Select the File Output node and change the label in it's properties to 'Normal'. We will use this to dynamically find the node and dynamically change the output path.
+    
+    # Access the File Output node in the compositor for the normal map
+    node_tree = s.node_tree
+    normal_output = None
+    for node in node_tree.nodes:
+        if node.type == 'OUTPUT_FILE' and 'Normal' in node.label:  # Ensure it's the right node by label
+            normal_output = node
+            node.base_path = ""  # Clear the base path to prevent concatenation
+            break
 
-
+    if normal_output is None:
+        print("Normal output node not found.")
+        return
+    # Assuming we have the normal_output node from the above, we can then use for each frame to update the output path while rendering lower in the code.
+    
     # loop all initial selected objects (which will likely just be one obect.. I haven't tried setting up multiple yet)
     for o in selected_list:
         
@@ -46,7 +65,6 @@ def render8directions_selected_objects(path):
                  a.name == "run"
 #                 or a.name == "dying"
                 ):
-                
                 #create folder for animation
                 action_folder = os.path.join(path, a.name)
                 if not os.path.exists(action_folder):
@@ -83,10 +101,15 @@ def render8directions_selected_objects(path):
                         or angle == 315
                         ):
                         
-                        #create folder for specific angle
+                        # Create folder for specific angle renders and normals
                         animation_folder = os.path.join(action_folder, angleDir)
                         if not os.path.exists(animation_folder):
                             os.makedirs(animation_folder)
+                            
+                        # Feel free to disable below if not using normals.
+                        normal_folder = os.path.join(action_folder, f"{angleDir}_Normals")
+                        if not os.path.exists(normal_folder):
+                            os.makedirs(normal_folder)
                         
                         #rotate the model for the new angle
                         bpy.context.active_object.rotation_euler[2] = math.radians(angle)
@@ -109,11 +132,19 @@ def render8directions_selected_objects(path):
                                                 + "_"
                                                 + str(s.frame_current).zfill(3)
                                                 )
+                                                
+                            # Set the full path for the normal map in the angle-specific normals folder
+                            normal_output.file_slots[0].path = os.path.join(
+                                normal_folder,
+                                f"{a.name}_{angle}_{str(s.frame_current).zfill(3)}_normal"
+                            )
+                            
                             bpy.ops.render.render( #{'dict': "override"},
                                                   #'INVOKE_DEFAULT',  
                                                   False,            # undo support
                                                   animation=False, 
                                                   write_still=True
                                                  ) 
+                                                 
         
 render8directions_selected_objects('C:\\tmp\\Mutant')
